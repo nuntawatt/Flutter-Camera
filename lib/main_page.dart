@@ -24,7 +24,7 @@ class _MainPageState extends State<MainPage> {
     if (widget.cameras.isNotEmpty) {
       startCamera(0);
     } else {
-      debugPrint("No cameras found.");
+      debugPrint("Not Cameras.");
     }
   }
 
