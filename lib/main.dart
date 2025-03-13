@@ -8,16 +8,12 @@ import 'package:gal/gal.dart';
 List<CameraDescription> cameras = [];
 
 Future<void> main() async {
-  // Ensure that plugin services are initialized
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Get available cameras
   try {
     cameras = await availableCameras();
   } on CameraException catch (e) {
-    print('Error initializing camera: $e');
+    print('Error initializing: $e');
   }
-
   runApp(const MainApp());
 }
 
@@ -28,9 +24,9 @@ class MainApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
+      theme: ThemeData.dark().copyWith(
+        primaryColor: Colors.black,
+        scaffoldBackgroundColor: Colors.black,
       ),
       home: const HomePage(),
     );
@@ -45,20 +41,21 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // Store a list of images instead of just the last one
   final List<File> _capturedImages = [];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Camera App'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
+        title: const Text('Camera App', style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.black,
       ),
       body: _capturedImages.isEmpty
           ? const Center(
-              child: Text('Tap the button to take a picture!'),
+              child: Text(
+                'Tap the button to take a picture!',
+                style: TextStyle(color: Colors.white54),
+              ),
             )
           : Padding(
               padding: const EdgeInsets.all(8.0),
@@ -72,7 +69,6 @@ class _HomePageState extends State<HomePage> {
                 itemBuilder: (context, index) {
                   return GestureDetector(
                     onTap: () {
-                      // Show full-screen image when tapped
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -83,7 +79,7 @@ class _HomePageState extends State<HomePage> {
                       );
                     },
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12),
                       child: Image.file(
                         _capturedImages[index],
                         fit: BoxFit.cover,
@@ -101,40 +97,14 @@ class _HomePageState extends State<HomePage> {
               builder: (context) => CameraScreen(cameras: cameras),
             ),
           );
-
           if (capturedImage != null) {
             setState(() {
               _capturedImages.add(File(capturedImage.path));
             });
           }
         },
-        tooltip: 'Take a Picture',
-        child: const Icon(Icons.camera_alt),
-      ),
-    );
-  }
-}
-
-// Add a new screen to view images in full screen
-class FullScreenImageView extends StatelessWidget {
-  final String imagePath;
-
-  const FullScreenImageView({super.key, required this.imagePath});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: const Text('Photo View'),
-      ),
-      body: Center(
-        child: Image.file(
-          File(imagePath),
-          fit: BoxFit.contain,
-        ),
+        backgroundColor: Colors.blue,
+        child: const Icon(Icons.camera_alt, color: Colors.white),
       ),
     );
   }
@@ -142,7 +112,6 @@ class FullScreenImageView extends StatelessWidget {
 
 class CameraScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
-
   const CameraScreen({super.key, required this.cameras});
 
   @override
@@ -157,7 +126,6 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void initState() {
     super.initState();
-    // Initialize the camera controller
     _initCamera(widget.cameras[0]);
   }
 
@@ -166,14 +134,12 @@ class _CameraScreenState extends State<CameraScreen> {
       camera,
       ResolutionPreset.high,
     );
-
     _initializeControllerFuture = _controller.initialize();
     setState(() {});
   }
 
   @override
   void dispose() {
-    // Dispose of the controller when the widget is disposed
     _controller.dispose();
     super.dispose();
   }
@@ -181,82 +147,67 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Take a Picture'),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-      ),
       body: FutureBuilder<void>(
         future: _initializeControllerFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.done) {
-            // If the Future is complete, display the preview
-            return Column(
+            return Stack(
               children: [
-                Expanded(
-                  child: CameraPreview(_controller),
+                CameraPreview(_controller),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        FloatingActionButton(
+                          heroTag: 'switchCamera',
+                          backgroundColor: Colors.blueGrey,
+                          onPressed: () {
+                            setState(() {
+                              _isRearCameraSelected = !_isRearCameraSelected;
+                              int cameraIndex = _isRearCameraSelected ? 0 : 1;
+                              if (widget.cameras.length > cameraIndex) {
+                                _initCamera(widget.cameras[cameraIndex]);
+                              }
+                            });
+                          },
+                          child: const Icon(Icons.flip_camera_ios, color: Colors.white),
+                        ),
+                        FloatingActionButton(
+                          heroTag: 'takePicture',
+                          backgroundColor: Colors.red,
+                          onPressed: () async {
+                            try {
+                              await _initializeControllerFuture;
+                              final image = await _controller.takePicture();
+                              await Gal.putImage(image.path);
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Picture saved to gallery!'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                              Navigator.pop(context, image);
+                            } catch (e) {
+                              print('Error taking picture: $e');
+                            }
+                          },
+                          child: const Icon(Icons.camera, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             );
           } else {
-            // Otherwise, display a loading indicator
             return const Center(child: CircularProgressIndicator());
           }
         },
       ),
-      floatingActionButton: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          // Switch camera button
-          FloatingActionButton(
-            heroTag: 'switchCamera',
-            onPressed: () {
-              setState(() {
-                _isRearCameraSelected = !_isRearCameraSelected;
-                int cameraIndex = _isRearCameraSelected ? 0 : 1;
-                if (widget.cameras.length > cameraIndex) {
-                  _initCamera(widget.cameras[cameraIndex]);
-                }
-              });
-            },
-            child: const Icon(Icons.flip_camera_ios),
-          ),
-          // Take picture button
-          FloatingActionButton(
-            heroTag: 'takePicture',
-            onPressed: () async {
-              try {
-                // Ensure that the camera is initialized
-                await _initializeControllerFuture;
-
-                // Take the picture
-                final image = await _controller.takePicture();
-
-                // Save the image to the gallery using gal package
-                await Gal.putImage(image.path);
-
-                if (!mounted) return;
-
-                // Show a snackbar
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Picture saved to gallery!'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-
-                // Return to home screen with the image
-                Navigator.pop(context, image);
-              } catch (e) {
-                // If an error occurs, log the error to the console
-                print('Error taking picture: $e');
-              }
-            },
-            child: const Icon(Icons.camera),
-          ),
-        ],
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }
